@@ -1,12 +1,8 @@
-const { getAll } = require('../../store');
+const { getByIndex } = require('../../store');
 
 module.exports = (req, res) => {
-  getAll({ kind: 'applications', size: 50, page: 1})
-    .then(doc => {
-      res.json(doc)
-    })
-    .catch(e => {
-      console.log(e);
-      res.json([]);
-    })
+  const user_id = req.user.sub;
+
+  getByIndex({ table: 'applications',  index: 'user_id', value: user_id })
+    .then(docs => res.json(docs))
 }

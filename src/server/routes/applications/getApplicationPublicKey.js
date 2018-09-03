@@ -1,14 +1,13 @@
 const { getById } = require('../../store');
 
 module.exports = async (req, res) => {
-  const user_id = req.user.sub;
   const id = req.params.id;
 
   const doc = await getById({ table: 'applications', id });
 
-  if(!doc || doc.user_id !== user_id) {
+  if(!doc)  {
     return res.json(null)
   }
 
-  res.json(doc)
+  res.json({ publicKey: doc.webpush_publickey })
 }

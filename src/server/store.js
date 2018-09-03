@@ -1,65 +1,78 @@
-const Datastore = require('@google-cloud/datastore');
+const r = require('rethinkdb');
 
-const config = require('../../configs/gcp');
-const dataStoreConfig = require('../../configs/datastore');
+const dbConfig = require('../../configs/rtk');
+const __DEV__ = process.env['NODE_ENV'] !== 'production'
 
-const NS = dataStoreConfig.namespace;
-
-const datastore = new Datastore({
-  projectId: config.projectId,
-});
-
-function insert({ namespace=NS, kind, data }) {
-  const entities = data.map(doc => ({
-    key: datastore.key({
-      namespace,
-      path: [ kind ]
-    }),
-    data: doc
-  }))
-
-  return datastore
-    .insert(entities)
-    .then( _ => entities.map(entity => entity.key.id))
+function getConn(host, port, db) {
+  return r.connect({host, port, db});
 }
 
-function remove({ namespace=NS, kind, ids }) {
-  const keys = ids.map(id => 
-    datastore.key({
-      namespace,
-      path: [ kind, id ],
-    })
-  )
+const deleteById = async ({ table, id, db=dbConfig.db, host=dbConfig.host, port=dbConfig.port, dev=__DEV__ }) => {
+  if(__DEV__) {
+    console.log(`[Store] deleteById --> ${db}.${table}@${host}:${port} with id ${id}`);
+  }
 
-  return datastore
-    .delete(keys)
-    .then( _ => ({ status: 'ok' }))
+  const conn = await getConn(host, port, db);
+
+  await r.table(table).get(id).delete().run(conn);
+  await conn.close();
 }
 
-function getByIds({ namespace=NS, kind, ids }) {
-  const keys = ids.map(id => 
-    datastore.key({
-      namespace,
-      path: [ kind, id ],
-    })
-  )
+const insert = async ({ table, doc, db=dbConfig.db, host=dbConfig.host, port=dbConfig.port, dev=__DEV__ }) => {
+  if(__DEV__) {
+    console.log(`[Store] insert --> ${db}.${table}@${host}:${port} with ${doc.length? doc.length: 1} docs`);
+  }
 
-  return datastore
-    .get(keys)
-    .then(results => results[0])
+  const conn = await getConn(host, port, db);
+
+  const result = await r.table(table).insert(doc).run(conn);
+  await conn.close();
+
+  return result;
 }
 
-function getAll({ namespace=NS, kind }) {
-  const query = datastore.createQuery(namespace, kind)
+const upsert = async ({ table, doc, db=dbConfig.db, host=dbConfig.host, port=dbConfig.port, dev=__DEV__ }) => {
+  if(__DEV__) {
+    console.log(`[Store] upsert --> ${db}.${table}@${host}:${port} with ${doc.length? doc.length: 1} docs`);
+  }
 
-  return datastore
-    .runQuery(query)
-    .then(results => results[0])
+  const conn = await getConn(host, port, db);
+
+  await r.table(table).insert(doc, {conflict: 'update'}).run(conn);
+  await conn.close();
+}
+
+const getById = async ({ table, id, db=dbConfig.db, host=dbConfig.host, port=dbConfig.port, dev=__DEV__ }) => {
+  if(__DEV__) {
+    console.log(`[Store] getById --> ${db}.${table}@${host}:${port} with id:${id}`);
+  }
+
+  const conn = await getConn(host, port, db);
+
+  const doc = await r.table(table).get(id).run(conn);
+  await conn.close();
+
+  return doc;
+}
+
+const getByIndex = async ({ table, index, value, db=dbConfig.db, host=dbConfig.host, port=dbConfig.port, dev=__DEV__ }) => {
+  if(__DEV__) {
+    console.log(`[Store] getByIndex --> ${db}.${table}@${host}:${port} with index:${index} and value:${value}`);
+  }
+
+  const conn = await getConn(host, port, db);
+
+  const cur = await r.table(table).getAll(value, { index }).run(conn);
+  const docs = await cur.toArray()
+  await conn.close();
+
+  return docs;
 }
 
 module.exports = {
+  deleteById,
   insert,
-  remove,
-  getByIds,
-  getAll,
+  upsert,
+  getById,
+  getByIndex,
 }
